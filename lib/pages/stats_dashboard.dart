@@ -208,17 +208,14 @@ class _StatsDashboardState extends State<StatsDashboard>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.grey3),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 16,
-            offset: const Offset(0, 6),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -227,19 +224,26 @@ class _StatsDashboardState extends State<StatsDashboard>
         children: [
           Row(
             children: [
-              Icon(
-                Icons.local_fire_department_rounded,
-                color: AppColors.streak,
-                size: 20,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: AppColors.streakLight,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: AppColors.streak,
+                  size: 18,
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
                 'Today\'s Overview',
                 style: GoogleFonts.ubuntu(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.grey4,
-                  letterSpacing: 0.6,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grey7,
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
@@ -253,18 +257,21 @@ class _StatsDashboardState extends State<StatsDashboard>
                 value: '$_todayCompleted / $_totalHabits',
                 icon: Icons.check_circle_rounded,
                 iconColor: AppColors.success,
+                backgroundColor: AppColors.success.withValues(alpha: 0.08),
               ),
               _summaryChip(
                 label: 'Completion',
                 value: '$rate%',
                 icon: Icons.pie_chart_rounded,
                 iconColor: AppColors.primary,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.08),
               ),
               _summaryChip(
                 label: 'Best Streak',
                 value: '${_globalBestStreak}d',
                 icon: Icons.emoji_events_rounded,
                 iconColor: AppColors.gold,
+                backgroundColor: AppColors.gold.withValues(alpha: 0.08),
               ),
             ],
           ),
@@ -275,7 +282,7 @@ class _StatsDashboardState extends State<StatsDashboard>
               child: LinearProgressIndicator(
                 value: _totalHabits == 0 ? 0 : _todayCompleted / _totalHabits,
                 minHeight: 8,
-                backgroundColor: AppColors.grey5.withValues(alpha: 0.3),
+                backgroundColor: AppColors.grey2,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   rate >= 80
                       ? AppColors.success
@@ -296,24 +303,41 @@ class _StatsDashboardState extends State<StatsDashboard>
     required String value,
     required IconData icon,
     required Color iconColor,
+    required Color backgroundColor,
   }) {
-    return Column(
-      children: [
-        Icon(icon, color: iconColor, size: 22),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: GoogleFonts.ubuntu(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-          ),
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
         ),
-        Text(
-          label,
-          style: GoogleFonts.ubuntu(fontSize: 11, color: AppColors.grey4),
+        child: Column(
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: GoogleFonts.ubuntu(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.grey7,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.ubuntu(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppColors.grey5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -377,49 +401,11 @@ class _StatsDashboardState extends State<StatsDashboard>
 
     return Column(
       children: [
-        // Habit selector chips
-        SizedBox(
-          height: 38,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _habitChip(null, 'Overview', type),
-              ...habits.map((h) => _habitChip(h, h.name, type)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
         // Content: either overview or selected habit
         _selectedHabit == null || _selectedHabit!.type != type
             ? _buildOverviewCards(habits, type)
             : _buildHabitDetail(_selectedHabit!),
       ],
-    );
-  }
-
-  Widget _habitChip(HabbitModel? habit, String label, String activeType) {
-    final isSelected = habit == null
-        ? (_selectedHabit == null || _selectedHabit!.type != activeType)
-        : _selectedHabit?.id == habit.id;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedHabit = habit),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.grey2,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.ubuntu(
-            fontSize: 13,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : AppColors.grey6,
-          ),
-        ),
-      ),
     );
   }
 
@@ -542,6 +528,52 @@ class _StatsDashboardState extends State<StatsDashboard>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Back navigation and Habit title
+        Row(
+          children: [
+            GestureDetector(
+              onTap: () => setState(() => _selectedHabit = null),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: AppColors.grey2,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.grey6,
+                  size: 16,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                h.iconData,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                h.name,
+                style: GoogleFonts.ubuntu(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: AppColors.grey7,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
         // Stat chips row
         Row(
           children: [
