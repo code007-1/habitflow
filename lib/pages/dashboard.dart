@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/components/habbit_card.dart';
 import 'package:habbit/core/colors.dart';
+import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/pages/add_habbit.dart';
 import 'package:habbit/pages/log_habbit.dart';
@@ -33,16 +34,7 @@ class _DashboardState extends State<Dashboard> {
       _isLoading = true;
     });
 
-    final sharedPreferences = Provider.of<SharedPreferences>(
-      context,
-      listen: false,
-    );
-    final habitsJson = sharedPreferences.getStringList('habbits') ?? [];
-
-    final loadedHabbits = habitsJson.map((e) {
-      final map = jsonDecode(e) as Map<String, dynamic>;
-      return HabbitModel.fromJson(map);
-    }).toList();
+    final loadedHabbits = await DataProvider.getData(DataProvider.habitsRef);
 
     setState(() {
       _habbits = loadedHabbits;
@@ -234,7 +226,8 @@ class _DashboardState extends State<Dashboard> {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => LogHabbit(habbit: habbit),
+                            builder: (context) =>
+                                LogHabbit(habbit: habbit, userId: '1'),
                           ),
                         );
                         _loadHabbits();

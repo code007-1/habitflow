@@ -1,13 +1,13 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/components/habbit_card.dart';
 import 'package:habbit/components/toggle_button.dart';
 import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/constants/selectable_icons.dart';
+import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:provider/provider.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
 
 class AddHabbit extends StatefulWidget {
   const AddHabbit({super.key});
@@ -47,11 +47,6 @@ class _AddHabbitState extends State<AddHabbit> {
       return;
     }
 
-    final sharedPreferences = Provider.of<SharedPreferences>(
-      context,
-      listen: false,
-    );
-    final habitsJson = sharedPreferences.getStringList('habbits') ?? [];
     if (_selectedFrequency == 'Daily') _selectedDays.addAll(weekDays);
 
     final newHabbit = HabbitModel(
@@ -71,30 +66,31 @@ class _AddHabbitState extends State<AddHabbit> {
       selectedDays: _selectedDays,
     );
 
-    // Add to list and serialize
-    final List<Map<String, dynamic>> habitsList = habitsJson
-        .map((e) => jsonDecode(e) as Map<String, dynamic>)
-        .toList();
-
-    // Add the new one
-    habitsList.add(newHabbit.toJson());
-
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-    // Save back to SharedPreferences
-    final newHabitsJson = habitsList.map((e) => jsonEncode(e)).toList();
-    await sharedPreferences.setStringList('habbits', newHabitsJson);
-
-    if (mounted) {
+    try {
+      await DataProvider.saveData(newHabbit, DataProvider.habitsRef);
+    } catch (e, st) {
+      if (!mounted) return;
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: Text('"${newHabbit.name}" created successfully!'),
-          backgroundColor: AppColors.primary,
+          content: Text('Save failed: $e'),
+          backgroundColor: AppColors.error,
         ),
       );
-      navigator.pop();
+      return;
     }
+
+    if (!mounted) return;
+
+    scaffoldMessenger.showSnackBar(
+      SnackBar(
+        content: Text('"${newHabbit.name}" created successfully!'),
+        backgroundColor: AppColors.primary,
+      ),
+    );
+    navigator.pop();
   }
 
   @override
@@ -234,7 +230,7 @@ class _AddHabbitState extends State<AddHabbit> {
                           });
                         },
                         indicatorSize: TabBarIndicatorSize.tab,
-                        dividerColor: AppColors.grey3,
+                        dividerColor: Colors.transparent,
                         //indicatorColor: AppColors.primary,
                         labelColor: AppColors.primary,
                         unselectedLabelColor: AppColors.grey5,
@@ -245,7 +241,15 @@ class _AddHabbitState extends State<AddHabbit> {
                           fontWeight: FontWeight.normal,
                         ),
                         indicator: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.grey3,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         tabs: types.map((type) {
                           return Tab(text: type);

@@ -12,7 +12,6 @@ class HabbitModel {
   final int streak;
   final String progress;
   final int goalThreshold;
-  final List<HabbitLogModel> logs;
 
   HabbitModel({
     required this.id,
@@ -25,12 +24,11 @@ class HabbitModel {
     this.streak = 0,
     this.progress = '0 Ticks',
     this.goalThreshold = 1,
-    this.logs = const [],
   });
 
   IconData get iconData => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
 
-  Map<String, dynamic> toJson() {
+  Map<String, Object?> toJson() {
     return {
       'id': id,
       'name': name,
@@ -42,7 +40,6 @@ class HabbitModel {
       'streak': streak,
       'progress': progress,
       'goalThreshold': goalThreshold,
-      'logs': logs.map((log) => log.toJson()).toList(),
     };
   }
 
@@ -54,14 +51,14 @@ class HabbitModel {
       iconCodePoint: json['iconCodePoint'] as int,
       frequency: json['frequency'] as String,
       type: json['type'] as String,
-      selectedDays: (json['selectedDays'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [],
+      selectedDays:
+          (json['selectedDays'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
       streak: json['streak'] as int? ?? 0,
       progress: json['progress'] as String? ?? '0 Ticks',
       goalThreshold: json['goalThreshold'] as int? ?? 1,
-      logs: (json['logs'] as List<dynamic>?)
-              ?.map((e) => HabbitLogModel.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
     );
   }
 }

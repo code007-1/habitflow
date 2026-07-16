@@ -16,7 +16,7 @@ class _AppShellState extends State<AppShell> {
 
   final List<Widget> _pages = const [
     Dashboard(),
-    StatsDashboard(),
+    //StatsDashboard(),
   ];
 
   @override
@@ -84,7 +84,9 @@ class _NavItem extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withValues(alpha: 0.12) : Colors.transparent,
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(30),
         ),
         child: Row(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/components/habbit_history_list.dart';
 import 'package:habbit/core/colors.dart';
+import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/models/habbit_log_model.dart';
 import 'package:provider/provider.dart';
@@ -10,8 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class LogHabbit extends StatefulWidget {
   final HabbitModel habbit;
+  final String userId;
 
-  const LogHabbit({super.key, required this.habbit});
+  const LogHabbit({super.key, required this.habbit, required this.userId});
 
   @override
   State<LogHabbit> createState() => _LogHabbitState();
@@ -21,11 +23,21 @@ class _LogHabbitState extends State<LogHabbit> {
   String _inputValue = '';
   String _noteValue = '';
   HabbitModel? _currentHabbit;
+  List<HabbitLogModel>? _habbitLogs;
 
   @override
   void initState() {
     super.initState();
     _currentHabbit = widget.habbit;
+    DataProvider.getFilteredData(
+      'habbitId',
+      _currentHabbit!.id,
+      DataProvider.habitslogRef,
+    ).then((value) {
+      setState(() {
+        _habbitLogs = value;
+      });
+    });
   }
 
   HabbitModel get habbit => _currentHabbit ?? widget.habbit;
@@ -38,45 +50,21 @@ class _LogHabbitState extends State<LogHabbit> {
       isCompleted = value >= widget.habbit.goalThreshold;
     }
 
-    final sharedPreferences = Provider.of<SharedPreferences>(
-      context,
-      listen: false,
-    );
-    final habitsJson = sharedPreferences.getStringList('habbits') ?? [];
-
-    final List<Map<String, dynamic>> habitsList = habitsJson
-        .map((e) => jsonDecode(e) as Map<String, dynamic>)
-        .toList();
-
-    int habitIndex = habitsList.indexWhere((h) => h['id'] == widget.habbit.id);
-    if (habitIndex == -1) return;
-
-    final habitData = habitsList[habitIndex];
-    final habitModel = HabbitModel.fromJson(habitData);
-
     final newLog = HabbitLogModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: widget.userId,
+      habbitId: widget.habbit.id,
       date: DateTime.now(),
       value: value,
       isCompleted: isCompleted,
       note: _noteValue.trim(),
     );
 
-    habitModel.logs.add(newLog);
-
-    // Update progress/streak here if needed
-    // For now, let's just save the logs
-
-    habitsList[habitIndex] = habitModel.toJson();
+    DataProvider.saveData(newLog, DataProvider.habitslogRef);
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final newHabitsJson = habitsList.map((e) => jsonEncode(e)).toList();
-    await sharedPreferences.setStringList('habbits', newHabitsJson);
 
     if (!mounted) return;
-    setState(() {
-      _currentHabbit = habitModel;
-    });
     scaffoldMessenger.showSnackBar(
       const SnackBar(
         content: Text('Log saved successfully!'),
@@ -437,7 +425,7 @@ class _LogHabbitState extends State<LogHabbit> {
                 'History',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
               ),
-              HabbitHistoryList(habbit: habbit),
+              HabbitHistoryList(habbit: habbit, habbitLogs: _habbitLogs ?? []),
             ],
           ),
         ),
