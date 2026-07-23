@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/core/colors.dart';
@@ -6,8 +5,6 @@ import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/pages/add_habbit.dart';
 import 'package:habbit/pages/log_habbit.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -487,41 +484,65 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Future<void> _handleDismiss(HabbitModel habbit, int index) async {
-    final sharedPreferences = Provider.of<SharedPreferences>(
-      context,
-      listen: false,
-    );
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    // Remove from the UI immediately, but defer the actual DB deletion until
+    // the undo window closes.
     setState(() {
       _habbits.removeAt(index);
     });
 
-    final habitsJson = _habbits.map((e) => jsonEncode(e.toJson())).toList();
-    await sharedPreferences.setStringList('habbits', habitsJson);
-
-    if (mounted) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          content: Text('"${habbit.name}" deleted'),
-          action: SnackBarAction(
-            label: 'Undo',
-            textColor: AppColors.primary,
-            onPressed: () async {
-              setState(() {
-                _habbits.insert(index, habbit);
-              });
-              final undoJson =
-                  _habbits.map((e) => jsonEncode(e.toJson())).toList();
-              await sharedPreferences.setStringList('habbits', undoJson);
-            },
-          ),
+    bool undone = false;
+    final controller = scaffoldMessenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 5),
+        // SnackBar.persist defaults to `action != null`, so having an Undo
+        // action makes it stay forever. Force auto-dismiss after `duration`.
+        persist: false,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-      );
+        content: Text('"${habbit.name}" deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: AppColors.primary,
+          onPressed: () {
+            undone = true;
+            if (mounted) {
+              setState(() {
+                _habbits.insert(index.clamp(0, _habbits.length), habbit);
+              });
+            }
+          },
+        ),
+      ),
+    );
+
+    final reason = await controller.closed;
+
+    // Undo pressed — nothing was ever deleted from the DB, so just stop.
+    if (undone || reason == SnackBarClosedReason.action) return;
+
+    // Window elapsed without undo — now delete the habit and its logs online.
+    try {
+      await DataProvider.deleteHabitWithLogs(habbit.id);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _habbits.insert(index.clamp(0, _habbits.length), habbit);
+        });
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.error,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            content: Text('Could not delete "${habbit.name}"'),
+          ),
+        );
+      }
     }
   }
 

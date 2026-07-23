@@ -73,4 +73,27 @@ class DataProvider {
     }
     return list;
   }
+
+  /// Deletes every document in [collectionReference] whose [field] equals
+  /// [value]. The habit/log model `id` fields are stored inside the document
+  /// (not the Firestore doc id), so we query for the matching docs first.
+  static Future<void> deleteWhere<T>(
+    String field,
+    dynamic value,
+    CollectionReference<T> collectionReference,
+  ) async {
+    final snapshot = await collectionReference
+        .where(field, isEqualTo: value)
+        .get();
+
+    await Future.wait(snapshot.docs.map((doc) => doc.reference.delete()));
+  }
+
+  /// Deletes a habit together with all of its related logs.
+  static Future<void> deleteHabitWithLogs(String habitId) async {
+    await Future.wait([
+      deleteWhere('id', habitId, habitsRef),
+      deleteWhere('ha   bbitId', habitId, habitslogRef),
+    ]);
+  }
 }
