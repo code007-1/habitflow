@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/components/habbit_history_list.dart';
@@ -6,8 +5,6 @@ import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/models/habbit_log_model.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class LogHabbit extends StatefulWidget {
   final HabbitModel habbit;

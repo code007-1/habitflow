@@ -16,7 +16,7 @@ class _AppShellState extends State<AppShell> {
 
   final List<Widget> _pages = const [
     Dashboard(),
-    //StatsDashboard(),
+    StatsDashboard(),
   ];
 
   @override

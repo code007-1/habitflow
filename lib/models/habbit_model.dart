@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:habbit/models/habbit_log_model.dart';
+import 'package:habbit/core/constants/selectable_icons.dart';
 
 class HabbitModel {
   final String id;
@@ -26,7 +26,12 @@ class HabbitModel {
     this.goalThreshold = 1,
   });
 
-  IconData get iconData => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
+  IconData get iconData {
+    return selectable_icons.firstWhere(
+      (icon) => icon.codePoint == iconCodePoint,
+      orElse: () => Icons.water_drop_rounded,
+    );
+  }
 
   Map<String, Object?> toJson() {
     return {

@@ -71,7 +71,7 @@ class _AddHabbitState extends State<AddHabbit> {
 
     try {
       await DataProvider.saveData(newHabbit, DataProvider.habitsRef);
-    } catch (e, st) {
+    } catch (e) {
       if (!mounted) return;
       scaffoldMessenger.showSnackBar(
         SnackBar(

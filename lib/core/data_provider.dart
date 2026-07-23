@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/rendering.dart';
 import 'package:habbit/models/habbit_log_model.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:firebase_core/firebase_core.dart';
