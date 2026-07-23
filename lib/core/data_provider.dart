@@ -93,7 +93,7 @@ class DataProvider {
   static Future<void> deleteHabitWithLogs(String habitId) async {
     await Future.wait([
       deleteWhere('id', habitId, habitsRef),
-      deleteWhere('ha   bbitId', habitId, habitslogRef),
+      deleteWhere('habbitId', habitId, habitslogRef),
     ]);
   }
 }
