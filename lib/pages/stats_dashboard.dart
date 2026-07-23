@@ -6,6 +6,7 @@ import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_log_model.dart';
 import 'package:habbit/models/habbit_model.dart';
+import 'package:habbit/models/unit_of_measure.dart';
 
 class StatsDashboard extends StatefulWidget {
   const StatsDashboard({super.key});
@@ -22,12 +23,12 @@ class _StatsDashboardState extends State<StatsDashboard>
   late TabController _tabController;
   HabbitModel? _selectedHabit;
 
-  final List<String> _types = ['Binary', 'Count', 'Duration'];
+  final List<Dimension> _dims = Units.dimensions;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: _dims.length, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {
@@ -120,7 +121,7 @@ class _StatsDashboardState extends State<StatsDashboard>
   // Last 7 days bar data
   List<BarChartGroupData> _barData(
     List<HabbitLogModel> logs,
-    String habbitType,
+    bool isBinary,
   ) {
     final today = DateTime.now();
     return List.generate(7, (i) {
@@ -132,7 +133,7 @@ class _StatsDashboardState extends State<StatsDashboard>
             l.date.day == day.day,
       );
       double y = 0;
-      if (habbitType == 'Binary') {
+      if (isBinary) {
         y = dayLogs.any((l) => l.isCompleted) ? 1 : 0;
       } else {
         y = dayLogs.isEmpty
@@ -381,6 +382,8 @@ class _StatsDashboardState extends State<StatsDashboard>
           ),
           child: TabBar(
             controller: _tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             onTap: (_) => setState(() => _selectedHabit = null),
             indicatorSize: TabBarIndicatorSize.tab,
             dividerColor: Colors.transparent,
@@ -401,17 +404,17 @@ class _StatsDashboardState extends State<StatsDashboard>
                 ),
               ],
             ),
-            tabs: _types.map((t) => Tab(text: t)).toList(),
+            tabs: _dims.map((d) => Tab(text: d.label)).toList(),
           ),
         ),
         const SizedBox(height: 16),
-        _buildTypeTab(_types[_tabController.index]),
+        _buildTypeTab(_dims[_tabController.index]),
       ],
     );
   }
 
-  Widget _buildTypeTab(String type) {
-    final habits = _habits.where((h) => h.type == type).toList();
+  Widget _buildTypeTab(Dimension dim) {
+    final habits = _habits.where((h) => h.dimension == dim).toList();
     if (habits.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 40),
@@ -420,7 +423,7 @@ class _StatsDashboardState extends State<StatsDashboard>
             Icon(Icons.inbox_rounded, size: 48, color: AppColors.grey4),
             const SizedBox(height: 10),
             Text(
-              'No $type habits yet',
+              'No ${dim.label} habits yet',
               style: GoogleFonts.ubuntu(color: AppColors.grey5, fontSize: 15),
             ),
           ],
@@ -431,7 +434,7 @@ class _StatsDashboardState extends State<StatsDashboard>
     return Column(
       children: [
         // Content: either overview or selected habit
-        _selectedHabit == null || _selectedHabit!.type != type
+        _selectedHabit == null || _selectedHabit!.dimension != dim
             ? _buildOverviewCards(habits)
             : _buildHabitDetail(_selectedHabit!),
       ],
@@ -560,7 +563,7 @@ class _StatsDashboardState extends State<StatsDashboard>
     final best = _bestStreak(logs);
     final rate = _completionRate(logs);
     final avg = _avgValue(logs);
-    final isBinary = habbit.type == 'Binary';
+    final isBinary = habbit.isBinary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,10 +636,8 @@ class _StatsDashboardState extends State<StatsDashboard>
             if (!isBinary) ...[
               const SizedBox(width: 8),
                 _statPill(
-                habbit.type == 'Count' ? '📊 Avg' : '⏱ Avg',
-                habbit.type == 'Count'
-                    ? '${avg.toStringAsFixed(1)}x'
-                    : '${avg.toStringAsFixed(0)}m',
+                '📊 Avg',
+                '${avg.toStringAsFixed(1)} ${habbit.unit.symbol}'.trim(),
                 AppColors.primary.withValues(alpha: 0.1),
                 AppColors.primary,
               ),
@@ -668,7 +669,7 @@ class _StatsDashboardState extends State<StatsDashboard>
 
         // Bar chart – last 7 days
         Text(
-          'Last 7 Days${isBinary ? '' : ' (total ${habbit.type == 'Count' ? 'count' : 'mins'})'}',
+          'Last 7 Days${isBinary ? '' : ' (total ${habbit.unit.symbol})'}',
           style: GoogleFonts.ubuntu(
             fontWeight: FontWeight.w700,
             fontSize: 13,
@@ -715,7 +716,7 @@ class _StatsDashboardState extends State<StatsDashboard>
   }
 
   Widget _buildBarChart(HabbitModel habbit, List<HabbitLogModel> logs) {
-    final bars = _barData(logs, habbit.type);
+    final bars = _barData(logs, habbit.isBinary);
     final maxY = bars
         .map((g) => g.barRods.first.toY)
         .fold<double>(0, (prev, y) => y > prev ? y : prev);
@@ -777,7 +778,7 @@ class _StatsDashboardState extends State<StatsDashboard>
               getTooltipColor: (_) => AppColors.grey7,
               getTooltipItem: (group, groupIndex, rod, rodIndex) =>
                   BarTooltipItem(
-                    rod.toY == 1 && habbit.type == 'Binary'
+                    rod.toY == 1 && habbit.isBinary
                         ? '✓'
                         : rod.toY.toStringAsFixed(0),
                     GoogleFonts.ubuntu(

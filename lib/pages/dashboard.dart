@@ -411,11 +411,11 @@ class _DashboardState extends State<Dashboard> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            _tag(habbit.frequency, AppColors.grey2,
+                            _tag(habbit.intervalFrequency, AppColors.grey2,
                                 AppColors.grey6),
                             const SizedBox(width: 6),
                             _tag(
-                              habbit.type,
+                              habbit.dimension.label,
                               AppColors.primary.withValues(alpha: 0.1),
                               AppColors.primaryDeep,
                             ),

@@ -6,6 +6,7 @@ import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/constants/selectable_icons.dart';
 import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
+import 'package:habbit/models/unit_of_measure.dart';
 // import 'package:provider/provider.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,9 +23,11 @@ class _AddHabbitState extends State<AddHabbit> {
   String _habbitDiscription = '';
   String _selectedFrequency = 'Daily';
   final frequencies = ['Daily', 'Weekly', 'Custom'];
-  final types = ['Binary', 'Count', 'Duration'];
-  String _selectedGoalType = 'Binary';
-  int _goalThreshold = 1;
+
+  // Unit-of-measure goal configuration.
+  Dimension _selectedDimension = Units.binary;
+  Unit? _selectedUnit;
+  double _goalValue = 1;
   final List<String> weekDays = [
     'Mon',
     'Tue',
@@ -47,22 +50,34 @@ class _AddHabbitState extends State<AddHabbit> {
       return;
     }
 
+    final isBinary = _selectedDimension == Units.binary;
+    if (!isBinary && _selectedUnit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please pick a unit for the goal'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     if (_selectedFrequency == 'Daily') _selectedDays.addAll(weekDays);
+
+    final goal = isBinary
+        ? Measurement(1, Units.done)
+        : Measurement(_goalValue, _selectedUnit!);
 
     final newHabbit = HabbitModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: _habbitName.trim(),
       description: _habbitDiscription.trim(),
-      iconCodePoint: _selectedIcon.codePoint,
-      frequency: _selectedFrequency,
-      type: _selectedGoalType,
+      icon: _selectedIcon.codePoint,
+      intervalFrequency: _selectedFrequency,
+      dimensionId: _selectedDimension.id,
+      goalValue: goal.value,
+      unitId: goal.unit.id,
       streak: 0,
-      progress: _selectedGoalType == 'Binary'
-          ? '0/1 Ticks'
-          : _selectedGoalType == 'Count'
-          ? '0/$_goalThreshold times'
-          : '0/$_goalThreshold mins',
-      goalThreshold: _selectedGoalType == 'Binary' ? 1 : _goalThreshold,
+      progress: isBinary ? '0/1 Ticks' : '0/${goal.format()}',
       selectedDays: _selectedDays,
     );
 
@@ -219,129 +234,91 @@ class _AddHabbitState extends State<AddHabbit> {
                   'Goal Configuration',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
-                DefaultTabController(
-                  length: 3,
-                  child: Column(
-                    children: [
-                      TabBar(
-                        onTap: (index) {
-                          setState(() {
-                            _selectedGoalType = types[index];
-                          });
-                        },
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        dividerColor: Colors.transparent,
-                        //indicatorColor: AppColors.primary,
-                        labelColor: AppColors.primary,
-                        unselectedLabelColor: AppColors.grey5,
-                        labelStyle: GoogleFonts.ubuntu(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        unselectedLabelStyle: GoogleFonts.ubuntu(
-                          fontWeight: FontWeight.normal,
-                        ),
-                        indicator: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.grey3,
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        tabs: types.map((type) {
-                          return Tab(text: type);
-                        }).toList(),
+                // Pick what the habit is measured in.
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: Units.dimensions.map((d) {
+                    final selected = _selectedDimension == d;
+                    return ChoiceChip(
+                      label: Text(d.label),
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedDimension = d;
+                          _selectedUnit = d == Units.binary
+                              ? null
+                              : Units.forDimension(d).first;
+                          _goalValue = 1;
+                        });
+                      },
+                      selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                      showCheckmark: false,
+                      labelStyle: TextStyle(
+                        color: selected ? AppColors.primary : AppColors.grey7,
+                        fontWeight: selected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
-                      SizedBox(
-                        height: 70,
-                        child: TabBarView(
-                          children: [
-                            const Center(child: Text('Yes/No')),
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 8.0,
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Text(
-                                      'Target Count: ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextField(
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                          contentPadding: EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 0,
-                                          ),
-                                          hintText: 'e.g., 5',
-                                        ),
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _goalThreshold =
-                                                int.tryParse(value) ?? 1;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                    );
+                  }).toList(),
+                ),
+                // Non-binary habits need a target amount and a unit.
+                if (_selectedDimension != Units.binary)
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 14,
                             ),
-                            Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16.0,
-                                  vertical: 8.0,
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Text(
-                                      'Duration (mins): ',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextField(
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                          contentPadding: EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 0,
-                                          ),
-                                          hintText: 'e.g., 30',
-                                        ),
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _goalThreshold =
-                                                int.tryParse(value) ?? 1;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            hintText: 'Target (e.g. 5)',
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _goalValue = double.tryParse(value) ?? 1;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 1,
+                        child: DropdownButtonFormField<Unit>(
+                          // Rebuild the field when the dimension changes so it
+                          // adopts the new unit list and default selection.
+                          key: ValueKey(_selectedDimension.id),
+                          initialValue: _selectedUnit,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 14,
                             ),
-                          ],
+                          ),
+                          items: Units.forDimension(_selectedDimension)
+                              .map(
+                                (u) => DropdownMenuItem(
+                                  value: u,
+                                  child: Text(
+                                    "${u.name}${u.symbol.isNotEmpty ? " (${u.symbol})" : ''}",
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (u) => setState(() => _selectedUnit = u),
                         ),
                       ),
                     ],
                   ),
-                ),
                 const Text(
                   'Interval Frequency',
                   style: TextStyle(fontWeight: FontWeight.w600),

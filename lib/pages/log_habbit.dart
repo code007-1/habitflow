@@ -5,6 +5,7 @@ import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/models/habbit_log_model.dart';
+import 'package:habbit/models/unit_of_measure.dart';
 
 class LogHabbit extends StatefulWidget {
   final HabbitModel habbit;
@@ -40,28 +41,46 @@ class _LogHabbitState extends State<LogHabbit> {
   HabbitModel get habbit => _currentHabbit ?? widget.habbit;
 
   void _saveLog(BuildContext context) async {
-    int value = 1;
+    final habbit = widget.habbit;
+    double value = 1;
     bool isCompleted = true;
-    if (widget.habbit.type != 'Binary') {
-      value = int.tryParse(_inputValue) ?? 1;
-      isCompleted = value >= widget.habbit.goalThreshold;
+    if (!habbit.isBinary) {
+      value = double.tryParse(_inputValue) ?? 0;
+      // Compare in the dimension's base unit so mixed units stay correct.
+      isCompleted = Measurement(value, habbit.unit).baseValue >=
+          habbit.goal.baseValue;
     }
 
     final newLog = HabbitLogModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       userId: widget.userId,
-      habbitId: widget.habbit.id,
+      habbitId: habbit.id,
       date: DateTime.now(),
       value: value,
+      unitId: habbit.unitId,
       isCompleted: isCompleted,
       note: _noteValue.trim(),
     );
 
-    DataProvider.saveData(newLog, DataProvider.habitslogRef);
-
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    try {
+      await DataProvider.saveData(newLog, DataProvider.habitslogRef);
+    } catch (e) {
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     if (!mounted) return;
+    setState(() {
+      _habbitLogs = [...?_habbitLogs, newLog];
+    });
     scaffoldMessenger.showSnackBar(
       const SnackBar(
         content: Text('Log saved successfully!'),
@@ -295,7 +314,7 @@ class _LogHabbitState extends State<LogHabbit> {
                       ),
                     ],
                   ),
-                  if (widget.habbit.type == 'Binary')
+                  if (widget.habbit.isBinary)
                     GestureDetector(
                       onTap: () => _saveLog(context),
                       child: Container(
@@ -335,9 +354,9 @@ class _LogHabbitState extends State<LogHabbit> {
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: AppColors.grey2,
-                              hintText: widget.habbit.type == 'Count'
-                                  ? 'Count (e.g. 5)'
-                                  : 'Duration (mins)',
+                              hintText:
+                                  'Enter ${widget.habbit.unit.name.toLowerCase()}'
+                                  '${widget.habbit.unit.symbol.isEmpty ? '' : ' (${widget.habbit.unit.symbol})'}',
                               hintStyle: TextStyle(color: AppColors.grey4),
                               border: const OutlineInputBorder(
                                 borderSide: BorderSide.none,

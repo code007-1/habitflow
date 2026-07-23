@@ -63,11 +63,8 @@ class HabbitHistoryList extends StatelessWidget {
   }
 
   String _logTitle(HabbitLogModel log) {
-    if (habbit.type == 'Binary') return 'Completed';
-    if (habbit.type == 'Count') {
-      return '${log.value} / ${habbit.goalThreshold} times';
-    }
-    return '${log.value} / ${habbit.goalThreshold} mins';
+    if (habbit.isBinary) return 'Completed';
+    return '${log.measurement.format()} / ${habbit.goal.format()}';
   }
 
   @override
@@ -171,7 +168,7 @@ class HabbitHistoryList extends StatelessWidget {
                     log: log,
                     dayLabel: _dayLabel(log.date),
                     logTitle: _logTitle(log),
-                    isBinary: habbit.type == 'Binary',
+                    isBinary: habbit.isBinary,
                   );
                 },
               ),
