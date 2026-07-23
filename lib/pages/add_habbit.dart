@@ -254,6 +254,11 @@ class _AddHabbitState extends State<AddHabbit> {
                       },
                       selectedColor: AppColors.primary.withValues(alpha: 0.2),
                       showCheckmark: false,
+                      side: BorderSide(
+                        color: selected
+                            ? AppColors.primary.withValues(alpha: 0.3)
+                            : AppColors.grey3,
+                      ),
                       labelStyle: TextStyle(
                         color: selected ? AppColors.primary : AppColors.grey7,
                         fontWeight: selected
@@ -361,6 +366,11 @@ class _AddHabbitState extends State<AddHabbit> {
                         },
                         selectedColor: AppColors.primary.withValues(alpha: 0.2),
                         showCheckmark: false,
+                        side: BorderSide(
+                          color: isSelected
+                              ? AppColors.primary.withValues(alpha: 0.3)
+                              : AppColors.grey3,
+                        ),
                         labelStyle: TextStyle(
                           color: isSelected
                               ? AppColors.primary
