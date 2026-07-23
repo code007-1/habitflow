@@ -6,8 +6,13 @@ import 'package:habbit/models/habbit_model.dart';
 
 class HabbitHistoryList extends StatelessWidget {
   final HabbitModel habbit;
+  final List<HabbitLogModel> habbitLogs;
 
-  const HabbitHistoryList({super.key, required this.habbit});
+  const HabbitHistoryList({
+    super.key,
+    required this.habbit,
+    required this.habbitLogs,
+  });
 
   // Group logs by month (e.g. "July 2026")
   Map<String, List<HabbitLogModel>> _groupByMonth(List<HabbitLogModel> logs) {
@@ -67,7 +72,7 @@ class HabbitHistoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logs = habbit.logs;
+    final logs = habbitLogs;
 
     if (logs.isEmpty) {
       return Container(

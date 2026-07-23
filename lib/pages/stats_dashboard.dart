@@ -1,12 +1,11 @@
-import 'dart:convert';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/components/streak_calendar.dart';
 import 'package:habbit/core/colors.dart';
+import 'package:habbit/core/data_provider.dart';
+import 'package:habbit/models/habbit_log_model.dart';
 import 'package:habbit/models/habbit_model.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class StatsDashboard extends StatefulWidget {
   const StatsDashboard({super.key});
@@ -18,6 +17,7 @@ class StatsDashboard extends StatefulWidget {
 class _StatsDashboardState extends State<StatsDashboard>
     with SingleTickerProviderStateMixin {
   List<HabbitModel> _habits = [];
+  List<HabbitLogModel> _allLogs = [];
   bool _isLoading = true;
   late TabController _tabController;
   HabbitModel? _selectedHabit;
@@ -45,22 +45,32 @@ class _StatsDashboardState extends State<StatsDashboard>
   }
 
   Future<void> _loadHabits() async {
-    final prefs = Provider.of<SharedPreferences>(context, listen: false);
-    final json = prefs.getStringList('habbits') ?? [];
     setState(() {
-      _habits = json
-          .map(
-            (e) => HabbitModel.fromJson(jsonDecode(e) as Map<String, dynamic>),
-          )
-          .toList();
-      _isLoading = false;
+      _isLoading = true;
     });
+
+    try {
+      final habits = await DataProvider.getData(DataProvider.habitsRef);
+      final logs = await DataProvider.getData(DataProvider.habitslogRef);
+      setState(() {
+        _habits = habits;
+        _allLogs = logs;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<HabbitLogModel> _getLogsForHabit(HabbitModel habbit) {
+    return _allLogs.where((l) => l.habbitId == habbit.id).toList();
   }
 
   // ── Aggregation helpers ──────────────────────────────────────────────────
 
-  int _currentStreak(HabbitModel h) {
-    final logs = h.logs;
+  int _currentStreak(List<HabbitLogModel> logs) {
     if (logs.isEmpty) return 0;
     final sorted = [...logs]..sort((a, b) => b.date.compareTo(a.date));
     int streak = 0;
@@ -78,11 +88,12 @@ class _StatsDashboardState extends State<StatsDashboard>
     return streak;
   }
 
-  int _bestStreak(HabbitModel h) {
-    final logs = [...h.logs]..sort((a, b) => a.date.compareTo(b.date));
+  int _bestStreak(List<HabbitLogModel> logs) {
+    if (logs.isEmpty) return 0;
+    final sorted = [...logs]..sort((a, b) => a.date.compareTo(b.date));
     int best = 0, current = 0;
     DateTime? prev;
-    for (final log in logs) {
+    for (final log in sorted) {
       final day = DateTime(log.date.year, log.date.month, log.date.day);
       if (prev == null || day.difference(prev).inDays == 1) {
         if (log.isCompleted) current++;
@@ -95,29 +106,33 @@ class _StatsDashboardState extends State<StatsDashboard>
     return best;
   }
 
-  double _completionRate(HabbitModel h) {
-    if (h.logs.isEmpty) return 0;
-    return h.logs.where((l) => l.isCompleted).length / h.logs.length * 100;
+  double _completionRate(List<HabbitLogModel> logs) {
+    if (logs.isEmpty) return 0;
+    return (logs.where((l) => l.isCompleted).length / logs.length * 100)
+        .roundToDouble();
   }
 
-  double _avgValue(HabbitModel h) {
-    if (h.logs.isEmpty) return 0;
-    return h.logs.map((l) => l.value).reduce((a, b) => a + b) / h.logs.length;
+  double _avgValue(List<HabbitLogModel> logs) {
+    if (logs.isEmpty) return 0;
+    return logs.map((l) => l.value).reduce((a, b) => a + b) / logs.length;
   }
 
   // Last 7 days bar data
-  List<BarChartGroupData> _barData(HabbitModel h) {
+  List<BarChartGroupData> _barData(
+    List<HabbitLogModel> logs,
+    String habbitType,
+  ) {
     final today = DateTime.now();
     return List.generate(7, (i) {
       final day = today.subtract(Duration(days: 6 - i));
-      final dayLogs = h.logs.where(
+      final dayLogs = logs.where(
         (l) =>
             l.date.year == day.year &&
             l.date.month == day.month &&
             l.date.day == day.day,
       );
       double y = 0;
-      if (h.type == 'Binary') {
+      if (habbitType == 'Binary') {
         y = dayLogs.any((l) => l.isCompleted) ? 1 : 0;
       } else {
         y = dayLogs.isEmpty
@@ -145,7 +160,7 @@ class _StatsDashboardState extends State<StatsDashboard>
     final today = DateTime.now();
     return _habits
         .where(
-          (h) => h.logs.any(
+          (h) => _getLogsForHabit(h).any(
             (l) =>
                 l.date.year == today.year &&
                 l.date.month == today.month &&
@@ -158,16 +173,19 @@ class _StatsDashboardState extends State<StatsDashboard>
 
   int get _globalBestStreak => _habits.isEmpty
       ? 0
-      : _habits.map(_bestStreak).reduce((a, b) => a > b ? a : b);
+      : _habits
+          .map((h) => _bestStreak(_getLogsForHabit(h)))
+          .reduce((a, b) => a > b ? a : b);
 
   // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Stats',
+          'Your Progress',
           style: GoogleFonts.ubuntu(
             color: AppColors.grey7,
             fontSize: 20,
@@ -176,7 +194,7 @@ class _StatsDashboardState extends State<StatsDashboard>
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(10),
-          child: Divider(color: AppColors.grey3),
+          child: Divider(color: AppColors.grey3, height: 1),
         ),
       ),
       body: _isLoading
@@ -192,7 +210,7 @@ class _StatsDashboardState extends State<StatsDashboard>
                 padding: const EdgeInsets.all(16),
                 children: [
                   _buildGlobalSummary(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   _buildTabSection(),
                 ],
               ),
@@ -206,16 +224,15 @@ class _StatsDashboardState extends State<StatsDashboard>
         ? 0
         : (_todayCompleted / _totalHabits * 100).round();
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.grey3),
-        boxShadow: [
+        gradient: AppColors.heroGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: AppColors.shadowBrand,
+            blurRadius: 24,
+            offset: Offset(0, 10),
           ),
         ],
       ),
@@ -225,71 +242,71 @@ class _StatsDashboardState extends State<StatsDashboard>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: AppColors.streakLight,
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: AppColors.streak,
+                  Icons.insights_rounded,
+                  color: Colors.white,
                   size: 18,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Text(
-                'Today\'s Overview',
+                "Today's Overview",
                 style: GoogleFonts.ubuntu(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.grey7,
+                  color: Colors.white,
                   letterSpacing: 0.2,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _summaryChip(
                 label: 'Done Today',
                 value: '$_todayCompleted / $_totalHabits',
                 icon: Icons.check_circle_rounded,
-                iconColor: AppColors.success,
-                backgroundColor: AppColors.success.withValues(alpha: 0.08),
               ),
               _summaryChip(
                 label: 'Completion',
                 value: '$rate%',
                 icon: Icons.pie_chart_rounded,
-                iconColor: AppColors.primary,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.08),
               ),
               _summaryChip(
                 label: 'Best Streak',
                 value: '${_globalBestStreak}d',
                 icon: Icons.emoji_events_rounded,
-                iconColor: AppColors.gold,
-                backgroundColor: AppColors.gold.withValues(alpha: 0.08),
               ),
             ],
           ),
           if (_totalHabits > 0) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: _totalHabits == 0 ? 0 : _todayCompleted / _totalHabits,
                 minHeight: 8,
-                backgroundColor: AppColors.grey2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  rate >= 80
-                      ? AppColors.success
-                      : rate >= 50
-                      ? AppColors.gold
-                      : AppColors.streak,
-                ),
+                backgroundColor: Colors.white.withValues(alpha: 0.25),
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              rate >= 80
+                  ? "You're on fire today! 🔥"
+                  : rate >= 50
+                  ? 'Great pace — keep going!'
+                  : 'A few more to reach your goal.',
+              style: GoogleFonts.ubuntu(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.9),
               ),
             ),
           ],
@@ -302,27 +319,26 @@ class _StatsDashboardState extends State<StatsDashboard>
     required String label,
     required String value,
     required IconData icon,
-    required Color iconColor,
-    required Color backgroundColor,
   }) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
-            Icon(icon, color: iconColor, size: 20),
-            const SizedBox(height: 6),
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(height: 8),
             Text(
               value,
               style: GoogleFonts.ubuntu(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                color: AppColors.grey7,
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 2),
@@ -331,7 +347,7 @@ class _StatsDashboardState extends State<StatsDashboard>
               style: GoogleFonts.ubuntu(
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
-                color: AppColors.grey5,
+                color: Colors.white.withValues(alpha: 0.85),
               ),
               textAlign: TextAlign.center,
             ),
@@ -344,38 +360,51 @@ class _StatsDashboardState extends State<StatsDashboard>
   // ── Tab section ──────────────────────────────────────────────────────────
   Widget _buildTabSection() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Habits by Type',
+            style: GoogleFonts.ubuntu(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: AppColors.grey7,
+            ),
+          ),
+        ),
         Container(
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: AppColors.grey2,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           child: TabBar(
             controller: _tabController,
             onTap: (_) => setState(() => _selectedHabit = null),
             indicatorSize: TabBarIndicatorSize.tab,
             dividerColor: Colors.transparent,
-            labelColor: AppColors.primary,
+            labelColor: AppColors.primaryDeep,
             unselectedLabelColor: AppColors.grey5,
             labelStyle: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
             unselectedLabelStyle: GoogleFonts.ubuntu(
-              fontWeight: FontWeight.normal,
+              fontWeight: FontWeight.w500,
             ),
             indicator: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(10),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
-                  color: AppColors.grey3,
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+                  color: AppColors.shadowSoft,
+                  blurRadius: 6,
+                  offset: Offset(0, 2),
                 ),
               ],
             ),
             tabs: _types.map((t) => Tab(text: t)).toList(),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         _buildTypeTab(_types[_tabController.index]),
       ],
     );
@@ -403,48 +432,55 @@ class _StatsDashboardState extends State<StatsDashboard>
       children: [
         // Content: either overview or selected habit
         _selectedHabit == null || _selectedHabit!.type != type
-            ? _buildOverviewCards(habits, type)
+            ? _buildOverviewCards(habits)
             : _buildHabitDetail(_selectedHabit!),
       ],
     );
   }
 
   // ── Overview: all habits of a type as summary rows ───────────────────────
-  Widget _buildOverviewCards(List<HabbitModel> habits, String type) {
+  Widget _buildOverviewCards(List<HabbitModel> habits) {
     return Column(
-      children: habits.map((h) => _buildSummaryRow(h, type)).toList(),
+      children: habits.map((h) => _buildSummaryRow(h)).toList(),
     );
   }
 
-  Widget _buildSummaryRow(HabbitModel h, String type) {
-    final streak = _currentStreak(h);
-    final rate = _completionRate(h);
+  Widget _buildSummaryRow(HabbitModel habbit) {
+    final logs = _getLogsForHabit(habbit);
+    final streak = _currentStreak(logs);
+    final rate = _completionRate(logs);
     return GestureDetector(
-      onTap: () => setState(() => _selectedHabit = h),
+      onTap: () => setState(() => _selectedHabit = habbit),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: AppColors.grey3),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
-              color: AppColors.grey3.withValues(alpha: 0.5),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: AppColors.shadowSoft,
+              blurRadius: 10,
+              offset: Offset(0, 4),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(13),
               ),
-              child: Icon(h.iconData, color: AppColors.primary, size: 22),
+              child: Icon(
+                habbit.iconData,
+                color: AppColors.primaryDeep,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -452,7 +488,7 @@ class _StatsDashboardState extends State<StatsDashboard>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    h.name,
+                    habbit.name,
                     style: GoogleFonts.ubuntu(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -518,12 +554,13 @@ class _StatsDashboardState extends State<StatsDashboard>
   }
 
   // ── Detailed view for a single selected habit ────────────────────────────
-  Widget _buildHabitDetail(HabbitModel h) {
-    final streak = _currentStreak(h);
-    final best = _bestStreak(h);
-    final rate = _completionRate(h);
-    final avg = _avgValue(h);
-    final isBinary = h.type == 'Binary';
+  Widget _buildHabitDetail(HabbitModel habbit) {
+    final logs = _getLogsForHabit(habbit);
+    final streak = _currentStreak(logs);
+    final best = _bestStreak(logs);
+    final rate = _completionRate(logs);
+    final avg = _avgValue(logs);
+    final isBinary = habbit.type == 'Binary';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -553,16 +590,12 @@ class _StatsDashboardState extends State<StatsDashboard>
                 color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                h.iconData,
-                color: AppColors.primary,
-                size: 20,
-              ),
+              child: Icon(habbit.iconData, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                h.name,
+                habbit.name,
                 style: GoogleFonts.ubuntu(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -599,9 +632,9 @@ class _StatsDashboardState extends State<StatsDashboard>
             ),
             if (!isBinary) ...[
               const SizedBox(width: 8),
-              _statPill(
-                h.type == 'Count' ? '📊 Avg' : '⏱ Avg',
-                h.type == 'Count'
+                _statPill(
+                habbit.type == 'Count' ? '📊 Avg' : '⏱ Avg',
+                habbit.type == 'Count'
                     ? '${avg.toStringAsFixed(1)}x'
                     : '${avg.toStringAsFixed(0)}m',
                 AppColors.primary.withValues(alpha: 0.1),
@@ -629,13 +662,13 @@ class _StatsDashboardState extends State<StatsDashboard>
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.grey3),
           ),
-          child: StreakCalendar(logs: h.logs),
+          child: StreakCalendar(logs: logs),
         ),
         const SizedBox(height: 16),
 
         // Bar chart – last 7 days
         Text(
-          'Last 7 Days${isBinary ? '' : ' (total ${h.type == 'Count' ? 'count' : 'mins'})'}',
+          'Last 7 Days${isBinary ? '' : ' (total ${habbit.type == 'Count' ? 'count' : 'mins'})'}',
           style: GoogleFonts.ubuntu(
             fontWeight: FontWeight.w700,
             fontSize: 13,
@@ -643,7 +676,7 @@ class _StatsDashboardState extends State<StatsDashboard>
           ),
         ),
         const SizedBox(height: 8),
-        _buildBarChart(h),
+        _buildBarChart(habbit, logs),
       ],
     );
   }
@@ -681,8 +714,8 @@ class _StatsDashboardState extends State<StatsDashboard>
     );
   }
 
-  Widget _buildBarChart(HabbitModel h) {
-    final bars = _barData(h);
+  Widget _buildBarChart(HabbitModel habbit, List<HabbitLogModel> logs) {
+    final bars = _barData(logs, habbit.type);
     final maxY = bars
         .map((g) => g.barRods.first.toY)
         .fold<double>(0, (prev, y) => y > prev ? y : prev);
@@ -744,7 +777,7 @@ class _StatsDashboardState extends State<StatsDashboard>
               getTooltipColor: (_) => AppColors.grey7,
               getTooltipItem: (group, groupIndex, rod, rodIndex) =>
                   BarTooltipItem(
-                    rod.toY == 1 && h.type == 'Binary'
+                    rod.toY == 1 && habbit.type == 'Binary'
                         ? '✓'
                         : rod.toY.toStringAsFixed(0),
                     GoogleFonts.ubuntu(

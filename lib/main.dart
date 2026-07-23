@@ -1,17 +1,32 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:habbit/core/colors.dart';
+import 'package:habbit/core/data_provider.dart';
+import 'package:habbit/firebase_options.dart';
 import 'package:habbit/pages/app_shell.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    webPersistentTabManager: WebPersistentMultipleTabManager(),
+  );
+
+  DataProvider.intialize();
+
   final sharedPreferences = await SharedPreferences.getInstance();
   runApp(
     MultiProvider(
-      providers: [Provider(create: (context) => sharedPreferences)],
+      providers: [
+        Provider(create: (context) => sharedPreferences),
+        Provider(create: (context) => FirebaseFirestore.instance),
+      ],
       child: const MyApp(),
     ),
   );

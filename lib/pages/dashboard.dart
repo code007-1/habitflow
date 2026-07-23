@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:habbit/components/habbit_card.dart';
 import 'package:habbit/core/colors.dart';
+import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:habbit/pages/add_habbit.dart';
 import 'package:habbit/pages/log_habbit.dart';
@@ -33,16 +33,7 @@ class _DashboardState extends State<Dashboard> {
       _isLoading = true;
     });
 
-    final sharedPreferences = Provider.of<SharedPreferences>(
-      context,
-      listen: false,
-    );
-    final habitsJson = sharedPreferences.getStringList('habbits') ?? [];
-
-    final loadedHabbits = habitsJson.map((e) {
-      final map = jsonDecode(e) as Map<String, dynamic>;
-      return HabbitModel.fromJson(map);
-    }).toList();
+    final loadedHabbits = await DataProvider.getData(DataProvider.habitsRef);
 
     setState(() {
       _habbits = loadedHabbits;
@@ -50,50 +41,74 @@ class _DashboardState extends State<Dashboard> {
     });
   }
 
+  // ── Greeting / date helpers ────────────────────────────────────────────────
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String get _todayLabel {
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final now = DateTime.now();
+    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+
+  int get _bestStreak => _habbits.isEmpty
+      ? 0
+      : _habbits.map((h) => h.streak).reduce((a, b) => a > b ? a : b);
+
+  int get _activeStreaks => _habbits.where((h) => h.streak > 0).length;
+
+  Future<void> _openAddHabbit() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AddHabbit()),
+    );
+    _loadHabbits();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Container(
-          margin: const EdgeInsets.all(4.0),
-          padding: const EdgeInsets.all(10.0),
-          decoration: const BoxDecoration(color: AppColors.grey7),
-          child: const Icon(
-            Icons.local_fire_department_rounded,
-            color: AppColors.grey1,
-          ),
-        ),
-        title: Text(
-          'HabitFlow',
-          style: GoogleFonts.ubuntu(
-            color: AppColors.grey7,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          InkWell(
-            child: Container(
-              margin: const EdgeInsets.all(4.0),
-              decoration: BoxDecoration(
-                border: Border.all(width: 4.0, color: AppColors.primary),
+      backgroundColor: AppColors.background,
+      appBar: _buildAppBar(),
+      floatingActionButton: _isLoading || _habbits.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _openAddHabbit,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 3,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(
+                'New Habit',
+                style: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
               ),
-              child: const Icon(Icons.add, color: AppColors.primary, size: 30),
             ),
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddHabbit()),
-              );
-              _loadHabbits();
-            },
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(10.0),
-          child: Divider(color: AppColors.grey3),
-        ),
-      ),
       body: SafeArea(
         child: _isLoading
             ? const Center(
@@ -101,155 +116,483 @@ class _DashboardState extends State<Dashboard> {
                   valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
                 ),
               )
-            : _habbits.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.spa_rounded,
-                        size: 80,
-                        color: AppColors.primary.withValues(alpha: 0.4),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No habits tracked yet',
-                        style: GoogleFonts.ubuntu(
-                          color: AppColors.grey7,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Create a habit to build healthy routines and achieve consistency.',
-                        style: GoogleFonts.ubuntu(
-                          color: AppColors.grey5,
-                          fontSize: 14,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
+            : RefreshIndicator(
+                onRefresh: _loadHabbits,
+                color: AppColors.primary,
+                child: _habbits.isEmpty
+                    ? _buildEmptyState()
+                    : ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                        children: [
+                          _buildHeroCard(),
+                          const SizedBox(height: 24),
+                          _buildSectionHeader(),
+                          const SizedBox(height: 12),
+                          ..._habbits.asMap().entries.map(
+                            (e) => _buildHabitCard(e.value, e.key),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                        ),
-                        onPressed: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AddHabbit(),
-                            ),
-                          );
-                          _loadHabbits();
-                        },
-                        icon: const Icon(Icons.add),
-                        label: Text(
-                          'Add Your First Habbit',
-                          style: GoogleFonts.ubuntu(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(16.0),
-                itemCount: _habbits.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final habbit = _habbits[index];
-                  return Dismissible(
-                    key: Key(habbit.id),
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20.0),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (direction) async {
-                      final sharedPreferences = Provider.of<SharedPreferences>(
-                        context,
-                        listen: false,
-                      );
-                      final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-                      setState(() {
-                        _habbits.removeAt(index);
-                      });
-
-                      final habitsJson = _habbits
-                          .map((e) => jsonEncode(e.toJson()))
-                          .toList();
-                      await sharedPreferences.setStringList(
-                        'habbits',
-                        habitsJson,
-                      );
-
-                      if (mounted) {
-                        scaffoldMessenger.showSnackBar(
-                          SnackBar(
-                            content: Text('"${habbit.name}" deleted'),
-                            action: SnackBarAction(
-                              label: 'Undo',
-                              textColor: Colors.white,
-                              onPressed: () async {
-                                setState(() {
-                                  _habbits.insert(index, habbit);
-                                });
-                                final undoJson = _habbits
-                                    .map((e) => jsonEncode(e.toJson()))
-                                    .toList();
-                                await sharedPreferences.setStringList(
-                                  'habbits',
-                                  undoJson,
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: InkWell(
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => LogHabbit(habbit: habbit),
-                          ),
-                        );
-                        _loadHabbits();
-                      },
-                      child: HabbitCard(
-                        title: habbit.name,
-                        icon: habbit.iconData,
-                        frequency: habbit.frequency,
-                        progress: habbit.progress,
-                      ),
-                    ),
-                  );
-                },
               ),
       ),
+    );
+  }
+
+  // ── App bar: brand icon + greeting/date ────────────────────────────────────
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      centerTitle: false,
+      titleSpacing: 16,
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              gradient: AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(13),
+              boxShadow: const [
+                BoxShadow(
+                  color: AppColors.shadowBrand,
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'HabitFlow',
+                  style: GoogleFonts.ubuntu(
+                    color: AppColors.grey7,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  _todayLabel,
+                  style: GoogleFonts.ubuntu(
+                    color: AppColors.grey5,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Divider(color: AppColors.grey3, height: 1),
+      ),
+    );
+  }
+
+  // ── Hero card: greeting + streak stats ─────────────────────────────────────
+  Widget _buildHeroCard() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: AppColors.heroGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadowBrand,
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$_greeting 👋',
+            style: GoogleFonts.ubuntu(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _activeStreaks > 0
+                ? 'Keep the momentum going!'
+                : 'Start a streak today.',
+            style: GoogleFonts.ubuntu(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _heroStat(
+                icon: Icons.grid_view_rounded,
+                value: '${_habbits.length}',
+                label: 'Habits',
+              ),
+              _heroDivider(),
+              _heroStat(
+                icon: Icons.bolt_rounded,
+                value: '$_activeStreaks',
+                label: 'Active',
+              ),
+              _heroDivider(),
+              _heroStat(
+                icon: Icons.emoji_events_rounded,
+                value: '${_bestStreak}d',
+                label: 'Best streak',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.white.withValues(alpha: 0.9), size: 20),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.ubuntu(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            style: GoogleFonts.ubuntu(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroDivider() {
+    return Container(
+      width: 1,
+      height: 40,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: Colors.white.withValues(alpha: 0.25),
+    );
+  }
+
+  Widget _buildSectionHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Your Habits',
+          style: GoogleFonts.ubuntu(
+            color: AppColors.grey7,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.primarySoft,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${_habbits.length} total',
+            style: GoogleFonts.ubuntu(
+              color: AppColors.primaryDeep,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Modern habit card ──────────────────────────────────────────────────────
+  Widget _buildHabitCard(HabbitModel habbit, int index) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: Key(habbit.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 22),
+          decoration: BoxDecoration(
+            color: AppColors.error,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Icon(Icons.delete_rounded, color: Colors.white),
+        ),
+        onDismissed: (direction) => _handleDismiss(habbit, index),
+        child: Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          elevation: 0,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => LogHabbit(habbit: habbit, userId: '1'),
+                ),
+              );
+              _loadHabbits();
+            },
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.grey3),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.shadowSoft,
+                    blurRadius: 12,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      habbit.iconData,
+                      color: AppColors.primaryDeep,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          habbit.name,
+                          style: GoogleFonts.ubuntu(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: AppColors.grey7,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _tag(habbit.frequency, AppColors.grey2,
+                                AppColors.grey6),
+                            const SizedBox(width: 6),
+                            _tag(
+                              habbit.type,
+                              AppColors.primary.withValues(alpha: 0.1),
+                              AppColors.primaryDeep,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _streakBadge(habbit.streak),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tag(String text, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.ubuntu(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _streakBadge(int streak) {
+    final active = streak > 0;
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            gradient: active ? AppColors.streakGradient : null,
+            color: active ? null : AppColors.grey2,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.local_fire_department_rounded,
+            color: active ? Colors.white : AppColors.grey4,
+            size: 20,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${streak}d',
+          style: GoogleFonts.ubuntu(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: active ? AppColors.streak : AppColors.grey4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleDismiss(HabbitModel habbit, int index) async {
+    final sharedPreferences = Provider.of<SharedPreferences>(
+      context,
+      listen: false,
+    );
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    setState(() {
+      _habbits.removeAt(index);
+    });
+
+    final habitsJson = _habbits.map((e) => jsonEncode(e.toJson())).toList();
+    await sharedPreferences.setStringList('habbits', habitsJson);
+
+    if (mounted) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          content: Text('"${habbit.name}" deleted'),
+          action: SnackBarAction(
+            label: 'Undo',
+            textColor: AppColors.primary,
+            onPressed: () async {
+              setState(() {
+                _habbits.insert(index, habbit);
+              });
+              final undoJson =
+                  _habbits.map((e) => jsonEncode(e.toJson())).toList();
+              await sharedPreferences.setStringList('habbits', undoJson);
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  // ── Empty state ────────────────────────────────────────────────────────────
+  Widget _buildEmptyState() {
+    return ListView(
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.spa_rounded,
+                    size: 64,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'No habits tracked yet',
+                  style: GoogleFonts.ubuntu(
+                    color: AppColors.grey7,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Create a habit to build healthy routines and achieve consistency.',
+                  style: GoogleFonts.ubuntu(
+                    color: AppColors.grey5,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  onPressed: _openAddHabbit,
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    'Add Your First Habit',
+                    style: GoogleFonts.ubuntu(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

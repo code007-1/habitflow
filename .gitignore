@@ -33,6 +33,12 @@ migrate_working_dir/
 /build/
 /coverage/
 
+/android/
+/ios/
+/macos/
+/web/
+/windows/
+/linux/
 # Symbolication related
 app.*.symbols
 

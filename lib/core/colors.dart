@@ -20,6 +20,11 @@ class AppColors {
   static const Color color4 = Color(0xFFF58A3D); // Modern Indigo
   static const Color color5 = Color(0xFF9167E4); // Modern Indigo
 
+  // Brand tints & accents (derived from primary → secondary)
+  static const Color primarySoft = Color(0xFFE4FAFE); // Very light cyan tint
+  static const Color primaryDeep = Color(0xFF0EA5C4); // Deeper cyan for text/CTA
+  static const Color secondaryDeep = Color(0xFF0FB89C); // Deeper teal accent
+
   // semantic colors
   static const Color error = Color(0xFFDD3C57); // Error
   static const Color warning = Color(0xFFF5B83D); // Warning
@@ -41,6 +46,31 @@ class AppColors {
   static const Color grey6 = Color(0xff475569);
   static const Color grey7 = Color(0xff0f172a);
   static const Color grey8 = Color(0xff000000);
+
+  // Elevation shadow tints
+  static const Color shadowSoft = Color(0x14000000); // ~8% black, soft cards
+  static const Color shadowBrand = Color(0x331FD5F9); // brand-tinted glow
+
+  // Cohesive brand gradient (matches primary → secondary)
+  static const Gradient brandGradient = LinearGradient(
+    colors: [Color(0xFF1FD5F9), Color(0xFF36E2C6)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Richer hero gradient for headline cards
+  static const Gradient heroGradient = LinearGradient(
+    colors: [Color(0xFF0EA5C4), Color(0xFF1FD5F9), Color(0xFF36E2C6)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  // Warm streak gradient for fire / achievement accents
+  static const Gradient streakGradient = LinearGradient(
+    colors: [Color(0xFFFF8A3D), Color(0xFFFF6B35)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   // Beautiful Premium Gradients
   static const Gradient primaryGradient = LinearGradient(
