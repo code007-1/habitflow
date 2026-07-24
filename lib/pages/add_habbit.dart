@@ -69,6 +69,7 @@ class _AddHabbitState extends State<AddHabbit> {
 
     final newHabbit = HabbitModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: DataProvider.currentUserId,
       name: _habbitName.trim(),
       description: _habbitDiscription.trim(),
       icon: _selectedIcon.codePoint,
