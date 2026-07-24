@@ -41,6 +41,8 @@ dependencies:
   google_fonts: ^8.1.0
   fl_chart: ^1.2.0
   cloud_firestore: ^6.7.1
+  firebase_auth: ^6.5.6
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +54,18 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# App launcher icon generation (run: dart run flutter_launcher_icons).
+# Uses the same fire-on-brand-gradient mark shown above "HabitFlow".
+flutter_launcher_icons:
+  image_path: "assets/icon/icon.png"
+  android: true
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

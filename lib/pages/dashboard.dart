@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
@@ -17,12 +20,29 @@ class _DashboardState extends State<Dashboard> {
   List<HabbitModel> _habbits = [];
   bool _isLoading = true;
 
+  /// Built once so the avatar isn't re-fetched on every rebuild. Repeatedly
+  /// constructing `NetworkImage` for the Google avatar URL gets rate-limited
+  /// (HTTP 429); a single cached provider is fetched once and reused.
+  ImageProvider? _avatarImage;
+
   @override
   void initState() {
     super.initState();
+    final photoUrl = DataProvider.currentUser?.photoURL;
+    if (photoUrl != null && photoUrl.isNotEmpty) {
+      _avatarImage = NetworkImage(_sizedPhotoUrl(photoUrl, 96));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadHabbits();
     });
+  }
+
+  /// Google avatar URLs accept an `=sN-c` sizing suffix that returns a small,
+  /// CDN-cached square — cheaper and far less likely to be throttled than the
+  /// default full-resolution image.
+  String _sizedPhotoUrl(String url, int size) {
+    final base = url.contains('=') ? url.substring(0, url.indexOf('=')) : url;
+    return '$base=s$size-c';
   }
 
   Future<void> _loadHabbits() async {
@@ -30,7 +50,7 @@ class _DashboardState extends State<Dashboard> {
       _isLoading = true;
     });
 
-    final loadedHabbits = await DataProvider.getData(DataProvider.habitsRef);
+    final loadedHabbits = await DataProvider.getUserData(DataProvider.habitsRef);
 
     setState(() {
       _habbits = loadedHabbits;
@@ -190,11 +210,125 @@ class _DashboardState extends State<Dashboard> {
           ),
         ],
       ),
+      actions: [_buildProfileMenu()],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Divider(color: AppColors.grey3, height: 1),
       ),
     );
+  }
+
+  // ── Profile avatar + account dropdown ──────────────────────────────────────
+  Widget _buildProfileMenu() {
+    final user = DataProvider.currentUser;
+    final displayName = user?.displayName ?? '';
+    final email = user?.email ?? '';
+    final seed = displayName.isNotEmpty
+        ? displayName
+        : (email.isNotEmpty ? email : '?');
+    final initial = seed.substring(0, 1).toUpperCase();
+
+    return PopupMenuButton<String>(
+      tooltip: 'Account',
+      position: PopupMenuPosition.under,
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onSelected: (value) {
+        if (value == 'logout') _signOut();
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Row(
+            children: [
+              _avatar(initial, radius: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (displayName.isNotEmpty)
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.ubuntu(
+                          color: AppColors.grey7,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    if (email.isNotEmpty)
+                      Text(
+                        email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.ubuntu(
+                          color: AppColors.grey5,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'logout',
+          child: Row(
+            children: [
+              const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'Sign out',
+                style: GoogleFonts.ubuntu(
+                  color: AppColors.error,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.only(right: 12, left: 4),
+        child: _avatar(initial, radius: 18),
+      ),
+    );
+  }
+
+  Widget _avatar(String initial, {required double radius}) {
+    final image = _avatarImage;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.primarySoft,
+      backgroundImage: image,
+      child: image != null
+          ? null
+          : Text(
+              initial,
+              style: GoogleFonts.ubuntu(
+                color: AppColors.primaryDeep,
+                fontSize: radius * 0.8,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+    );
+  }
+
+  Future<void> _signOut() async {
+    // Sign out of both Firebase and Google so the next sign-in prompts for an
+    // account instead of silently reusing the previous session. GoogleSignIn is
+    // only used on mobile/desktop; on web Firebase drives the OAuth session.
+    if (!kIsWeb) {
+      await GoogleSignIn.instance.signOut();
+    }
+    await FirebaseAuth.instance.signOut();
+    // AuthGate listens to authStateChanges and will swap back to Login.
   }
 
   // ── Hero card: greeting + streak stats ─────────────────────────────────────
@@ -360,7 +494,8 @@ class _DashboardState extends State<Dashboard> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => LogHabbit(habbit: habbit, userId: '1'),
+                  builder: (context) =>
+                      LogHabbit(habbit: habbit, userId: DataProvider.currentUserId),
                 ),
               );
               _loadHabbits();

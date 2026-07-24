@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
 import 'package:habbit/firebase_options.dart';
-import 'package:habbit/pages/app_shell.dart';
+import 'package:habbit/pages/auth_gate.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -93,7 +93,7 @@ class MyApp extends StatelessWidget {
           hintStyle: GoogleFonts.ubuntu(color: AppColors.grey6, fontSize: 14),
         ),
       ),
-      home: const AppShell(), //const MyHomePage(title: 'Habit Flow'),
+      home: const AuthGate(),
     );
   }
 }
