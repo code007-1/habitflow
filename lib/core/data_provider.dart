@@ -74,6 +74,23 @@ class DataProvider {
     return list;
   }
 
+  /// Overwrites the document whose `id` field equals [id] with [data]. Model
+  /// `id`s live inside the document (not as the Firestore doc id), so the
+  /// matching doc is looked up first.
+  static Future<void> updateById<T>(
+    String id,
+    T data,
+    CollectionReference<T> collectionReference,
+  ) async {
+    final snapshot = await collectionReference
+        .where('id', isEqualTo: id)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isEmpty) return;
+    await snapshot.docs.first.reference.set(data);
+  }
+
   /// Deletes every document in [collectionReference] whose [field] equals
   /// [value]. The habit/log model `id` fields are stored inside the document
   /// (not the Firestore doc id), so we query for the matching docs first.
