@@ -4,6 +4,7 @@ import 'package:habbit/models/unit_of_measure.dart';
 
 class HabbitModel {
   final String id;
+  final String userId;
   final String name;
   final String description;
   final int icon;
@@ -24,6 +25,7 @@ class HabbitModel {
 
   HabbitModel({
     required this.id,
+    required this.userId,
     required this.name,
     required this.description,
     required this.icon,
@@ -56,6 +58,7 @@ class HabbitModel {
   Map<String, Object?> toJson() {
     return {
       'id': id,
+      'userId': userId,
       'name': name,
       'description': description,
       'iconCodePoint': icon,
@@ -72,6 +75,7 @@ class HabbitModel {
   factory HabbitModel.fromJson(Map<String, dynamic> json) {
     return HabbitModel(
       id: json['id'] as String,
+      userId: json['userId'] as String,
       name: json['name'] as String,
       description: json['description'] as String,
       icon: json['iconCodePoint'] as int,

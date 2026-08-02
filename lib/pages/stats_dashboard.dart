@@ -51,8 +51,8 @@ class _StatsDashboardState extends State<StatsDashboard>
     });
 
     try {
-      final habits = await DataProvider.getData(DataProvider.habitsRef);
-      final logs = await DataProvider.getData(DataProvider.habitslogRef);
+      final habits = await DataProvider.getUserData(DataProvider.habitsRef);
+      final logs = await DataProvider.getUserData(DataProvider.habitslogRef);
       setState(() {
         _habits = habits;
         _allLogs = logs;

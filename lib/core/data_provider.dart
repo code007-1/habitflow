@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:habbit/models/habbit_log_model.dart';
 import 'package:habbit/models/habbit_model.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,6 +10,12 @@ class DataProvider {
 
   static late CollectionReference<HabbitModel> habitsRef;
   static late CollectionReference<HabbitLogModel> habitslogRef;
+
+  static User? get currentUser => FirebaseAuth.instance.currentUser;
+
+  /// Stable per-user id used to scope all habit/log documents. Empty string
+  /// when signed out (callers run behind [AuthGate], so this is defensive).
+  static String get currentUserId => currentUser?.uid ?? '';
 
   DataProvider._() {
     db = FirebaseFirestore.instanceFor(
@@ -56,6 +63,14 @@ class DataProvider {
       list.add(docSnapshot.data() as T);
     }
     return list;
+  }
+
+  /// Fetches only the documents owned by the signed-in user (those whose
+  /// `userId` field matches [currentUserId]).
+  static Future<List<T>> getUserData<T>(
+    CollectionReference<T> collectionReference,
+  ) {
+    return getFilteredData('userId', currentUserId, collectionReference);
   }
 
   static Future<List<T>> getFilteredData<T>(
