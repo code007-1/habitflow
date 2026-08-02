@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:habbit/components/habbit_history_list.dart';
+import 'package:habbit/components/detailed_log_list.dart';
 import 'package:habbit/components/streak_calendar.dart';
 import 'package:habbit/core/colors.dart';
 import 'package:habbit/core/data_provider.dart';
@@ -149,6 +149,77 @@ class _LogHabbitState extends State<LogHabbit> {
     _showSnack('Log saved successfully!', AppColors.success);
   }
 
+  // ── Edit / duplicate / delete ──────────────────────────────────────────────
+  /// Applies a change locally first, then persists it — rolling the list back
+  /// if the write fails so the UI never claims a save that didn't happen.
+  Future<void> _mutateLogs(
+    List<HabbitLogModel> next,
+    Future<void> Function() write,
+    String successMessage,
+    String failurePrefix,
+  ) async {
+    final previous = _habbitLogs;
+    setState(() => _habbitLogs = next);
+
+    try {
+      await write();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _habbitLogs = previous);
+      _showSnack('$failurePrefix: $e', AppColors.error);
+      return;
+    }
+
+    if (!mounted) return;
+    _showSnack(successMessage, AppColors.success);
+  }
+
+  Future<void> _updateLog(HabbitLogModel updated) {
+    return _mutateLogs(
+      [
+        for (final log in _logs)
+          if (log.id == updated.id) updated else log,
+      ],
+      () => DataProvider.updateById(
+        updated.id,
+        updated,
+        DataProvider.habitslogRef,
+      ),
+      'Log updated',
+      'Update failed',
+    );
+  }
+
+  Future<void> _duplicateLog(HabbitLogModel source) {
+    final copy = source.copyWith(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      date: DateTime.now(),
+    );
+
+    return _mutateLogs(
+      [..._logs, copy],
+      () => DataProvider.saveData(copy, DataProvider.habitslogRef),
+      'Logged again just now',
+      'Save failed',
+    );
+  }
+
+  Future<void> _deleteLogs(List<HabbitLogModel> logs) {
+    if (logs.isEmpty) return Future.value();
+    final ids = logs.map((l) => l.id).toSet();
+
+    return _mutateLogs(
+      _logs.where((log) => !ids.contains(log.id)).toList(),
+      () => Future.wait(
+        ids.map(
+          (id) => DataProvider.deleteWhere('id', id, DataProvider.habitslogRef),
+        ),
+      ),
+      ids.length == 1 ? 'Log deleted' : '${ids.length} logs deleted',
+      'Delete failed',
+    );
+  }
+
   void _showSnack(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -196,21 +267,14 @@ class _LogHabbitState extends State<LogHabbit> {
             const SizedBox(height: 20),
             _buildCalendar(),
             const SizedBox(height: 20),
-            _buildHistoryHeader(),
-            const SizedBox(height: 8),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      AppColors.primary,
-                    ),
-                  ),
-                ),
-              )
-            else
-              HabbitHistoryList(habbit: habbit, habbitLogs: _logs),
+            DetailedLogList(
+              habbit: habbit,
+              habbitLogs: _logs,
+              isLoading: _loading,
+              onEdit: _updateLog,
+              onDuplicate: _duplicateLog,
+              onDelete: _deleteLogs,
+            ),
           ],
         ),
       ),
@@ -382,7 +446,9 @@ class _LogHabbitState extends State<LogHabbit> {
   Widget _buildTodayIndicator() {
     final done = habbit.isBinary ? _doneToday : _todayProgress >= 1;
     final color = done ? AppColors.success : AppColors.primary;
-    final progress = habbit.isBinary ? (_doneToday ? 1.0 : 0.0) : _todayProgress;
+    final progress = habbit.isBinary
+        ? (_doneToday ? 1.0 : 0.0)
+        : _todayProgress;
 
     return SizedBox(
       width: 76,
@@ -438,10 +504,7 @@ class _LogHabbitState extends State<LogHabbit> {
             ),
           ),
           const SizedBox(height: 14),
-          if (habbit.isBinary)
-            _buildBinaryAction()
-          else
-            _buildValueInput(),
+          if (habbit.isBinary) _buildBinaryAction() else _buildValueInput(),
           const SizedBox(height: 12),
           TextField(
             controller: _noteController,
@@ -520,7 +583,11 @@ class _LogHabbitState extends State<LogHabbit> {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : const Icon(Icons.check_rounded, color: Colors.white, size: 28),
+                : const Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
             const SizedBox(height: 4),
             Text(
               'Mark as Done',
@@ -548,7 +615,9 @@ class _LogHabbitState extends State<LogHabbit> {
               fillColor: AppColors.grey2,
               hintText: 'Enter ${habbit.unit.name.toLowerCase()}',
               hintStyle: TextStyle(color: AppColors.grey4),
-              suffixText: habbit.unit.symbol.isEmpty ? null : habbit.unit.symbol,
+              suffixText: habbit.unit.symbol.isEmpty
+                  ? null
+                  : habbit.unit.symbol,
               suffixStyle: GoogleFonts.ubuntu(
                 color: AppColors.grey6,
                 fontWeight: FontWeight.w700,
@@ -618,38 +687,6 @@ class _LogHabbitState extends State<LogHabbit> {
           decoration: _cardDecoration(),
           child: StreakCalendar(logs: _logs),
         ),
-      ],
-    );
-  }
-
-  Widget _buildHistoryHeader() {
-    return Row(
-      children: [
-        Text(
-          'History',
-          style: GoogleFonts.ubuntu(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: AppColors.grey7,
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (!_loading)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.primarySoft,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${_logs.length}',
-              style: GoogleFonts.ubuntu(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryDeep,
-              ),
-            ),
-          ),
       ],
     );
   }
